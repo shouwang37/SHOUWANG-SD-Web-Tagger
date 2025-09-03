@@ -9,8 +9,9 @@
 专为 Stable Diffusion 等 AI 绘图工具设计的本地图集管理桌面应用，帮助 AI 绘图创作者高效管理作品与提示词。
 
 <p align="center">
-  <img src="src/preview.png" alt="界面预览" width="700">
+  <img src="src/吴国太 淑逸闲华.ico" alt="界面预览" width="700">
 </p>
+
 
 ## 📌 版本信息
 
@@ -188,8 +189,8 @@ python demo.py
 
 👤 **守望**
 
-- Bilibili: [@守望](https://space.bilibili.com/1284158907)
-- GitHub: [@YourUsername](https://github.com/YourUsername)
+- Bilibili: [@苍穹殿殿主守望](https://space.bilibili.com/1284158907)
+- GitHub: [@shouwang37](https://github.com/shouwang37)
 
 ## 📄 许可证
 
