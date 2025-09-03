@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>守望影神图集案器 v0.1</title>
+    <link rel="icon" type="image/x-icon" href="/src/吴国太 淑逸闲华.ico">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/src/styles.css">
+</head>
+<body class="h-screen flex flex-col">
+    <!-- Header 10% -->
+    <header class="h-[10%] flex items-center justify-between px-6 bg-slate-950 border-b border-slate-700">
+        <a href="https://space.bilibili.com/1284158907?spm_id_from=333.337.0.0" 
+           target="_blank" 
+           class="text-lg font-semibold text-blue-400 hover:text-blue-300 transition-colors">
+            作者：守望
+        </a>
+        
+        <h1 class="text-2xl font-bold">
+            <span class="bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
+                守望影神图集案器
+            </span>
+            <span class="text-slate-400 text-sm font-normal ml-2">v0.1</span>
+        </h1>
+        
+        <div class="flex items-center space-x-3">
+            <div class="relative">
+                <input type="text" 
+                       id="searchInput" 
+                       class="search-input text-white placeholder-slate-400 w-64"
+                       placeholder="搜索单元名或文件夹...">
+                <button id="clearSearch" 
+                        class="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-white">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content 90% -->
+    <main class="h-[90%] flex">
+        <!-- Sidebar 10% -->
+        <aside class="w-[10%] sidebar p-4 scrollbar overflow-y-auto">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-sm font-semibold text-slate-200 flex items-center">
+                    📁 字段导航
+                </h2>
+            </div>
+            <!-- 新建文件夹按钮 -->
+            <div class="flex gap-2 mb-4">
+                <button id="newSiblingFolderBtn" 
+                        class="flex-1 bg-slate-800 hover:bg-slate-700 border border-slate-600 rounded-lg px-2 py-1 text-xs transition-colors"
+                        title="新建同级文件夹">
+                    同级
+                </button>
+                <button id="newChildFolderBtn" 
+                        class="flex-1 bg-slate-800 hover:bg-slate-700 border border-slate-600 rounded-lg px-2 py-1 text-xs transition-colors"
+                        title="新建子级文件夹">
+                    子级
+                </button>
+            </div>
+            <div id="treeView" class="space-y-1"></div>
+        </aside>
+
+        <!-- Content Area 90% -->
+        <section class="w-[90%] flex flex-col">
+            <!-- Toolbar -->
+            <div class="flex justify-between items-center p-4 bg-slate-900 border-b border-slate-700">
+                <span id="currentPath" class="text-sm text-slate-400">images /</span>
+                <div class="flex items-center space-x-2">
+                    <select id="sortSelect" class="bg-slate-800 border border-slate-600 rounded-lg px-3 py-1 text-sm">
+                        <option value="name-asc" selected>名称 A-Z</option>
+                        <option value="name-desc">名称 Z-A</option>
+                        <option value="date-desc">最新优先</option>
+                        <option value="date-asc">最旧优先</option>
+                    </select>
+                    <button id="refreshBtn" 
+                            class="bg-slate-800 hover:bg-slate-700 border border-slate-600 rounded-lg px-3 py-1 text-sm transition-colors">
+                        刷新
+                    </button>
+                </div>
+            </div>
+
+            <!-- Content -->
+            <div id="contentArea" 
+                 class="flex-1 overflow-auto scrollbar relative" 
+                 ondrop="handleDrop(event)" 
+                 ondragover="allowDrop(event)" 
+                 ondragleave="handleDragLeave(event)">
+                
+                <!-- Drop Overlay -->
+                <div id="dropOverlay" class="drop-zone fixed inset-0 flex items-center justify-center hidden">
+                    <div class="text-center">
+                        <svg class="w-16 h-16 mx-auto mb-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+                        </svg>
+                        <p class="text-xl font-semibold">拖放图片到此处</p>
+                        <p class="text-sm mt-2">支持 .jpg, .png, .jpeg, .webp, .bmp, .gif</p>
+                    </div>
+                </div>
+
+                <!-- Cards Grid -->
+                <div id="cardsGrid" class="cards-grid"></div>
+
+                <!-- Empty State -->
+                <div id="emptyState" class="hidden flex flex-col items-center justify-center h-full text-slate-500">
+                    <svg class="w-24 h-24 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
+                    </svg>
+                    <h3 class="text-xl font-semibold mb-2">此文件夹为空</h3>
+                    <p class="text-sm">拖拽图片到此区域或使用 Ctrl+V 粘贴图片来创建新单元</p>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Edit Modal -->
+    <div id="editModal" class="modal fixed inset-0 flex items-center justify-center p-4 hidden z-50">
+        <div class="modal-content p-6">
+            <h2 id="modalTitle" class="text-xl font-bold mb-6">编辑单元</h2>
+            <div class="flex gap-6">
+                <div class="flex-shrink-0">
+                    <img id="modalImage" src="" alt="预览" class="w-64 h-auto rounded-lg bg-slate-800">
+                </div>
+                <div class="flex-1 space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-300 mb-2">单元名</label>
+                        <input type="text" id="unitNameInput" 
+                               class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-300 mb-2">单元值 (提示词)</label>
+                        <textarea id="unitValueTextarea" 
+                                  rows="8" 
+                                  class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white resize-none"
+                                  placeholder="输入 Stable Diffusion 提示词..."></textarea>
+                    </div>
+                </div>
+            </div>
+            <div class="flex justify-end mt-6 space-x-3">
+                <button onclick="closeModal()" 
+                        class="px-4 py-2 bg-slate-600 hover:bg-slate-700 rounded-lg transition-colors">
+                    取消
+                </button>
+                <button id="saveBtn" 
+                        class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors">
+                    保存
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+        <div class="loading-spinner"></div>
+    </div>
+
+    <!-- Folder Modal -->
+    <div id="folderModal" class="modal fixed inset-0 flex items-center justify-center p-4 hidden z-50">
+        <div class="modal-content p-6">
+            <h2 id="folderModalTitle" class="text-xl font-bold mb-6">新建文件夹</h2>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-300 mb-2">文件夹名称</label>
+                    <input type="text" id="folderNameInput" 
+                           class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white"
+                           placeholder="输入文件夹名称">
+                </div>
+            </div>
+            <div class="flex justify-end mt-6 space-x-3">
+                <button onclick="closeFolderModal()" 
+                        class="px-4 py-2 bg-slate-600 hover:bg-slate-700 rounded-lg transition-colors">
+                    取消
+                </button>
+                <button id="folderSaveBtn" 
+                        class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors">
+                    保存
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/src/script.js"></script>
+</body>
+</html>
