@@ -36,8 +36,8 @@ def create_app():
     # 使用 app.before_first_request 的兼容方式
     @app.before_request
     def before_first_request():
-        if not hasattr(app, 'thumbnail_generation_started'):
-            app.thumbnail_generation_started = True
+        if not app.config.get('THUMBNAIL_GENERATION_STARTED', False):
+            app.config['THUMBNAIL_GENERATION_STARTED'] = True
             start_thumbnail_generation()
     
     return app
@@ -47,5 +47,5 @@ if __name__ == '__main__':
     print("🎨 守望影神图集案器 v0.1 启动中...")
     print(f"📁 图片目录: {os.path.abspath(IMAGE_DIR)}")
     print(f"🖼️ 缩略图目录: {os.path.abspath(THUMBNAIL_DIR)}")
-    print("🌐 服务地址: http://127.0.0.1:5000")
-    app.run(host='127.0.0.1', port=5000, debug=False, threaded=True)
+    print("🌐 服务地址: http://127.0.0.1:3737")
+    app.run(host='127.0.0.1', port=3737, debug=False, threaded=True)

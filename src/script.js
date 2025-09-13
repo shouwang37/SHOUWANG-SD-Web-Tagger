@@ -4,7 +4,8 @@ class ImageGalleryApp {
     constructor() {
         // 动态初始化当前路径
         this.currentPath = '';
-        this.sortType = 'name-asc';
+        this.folderSortType = 'name-asc';  // 文件夹排序类型
+        this.contentSortType = 'name-asc'; // 内容排序类型
         this.isCreating = false;
         this.debounceTimer = null;
         // 添加分页相关属性
@@ -15,7 +16,9 @@ class ImageGalleryApp {
         this.isScrollLoading = false; // 防止重复加载
         // 添加图片预加载相关属性
         this.imageObserver = null;
-        this.preloadMargin = 300; // 提前加载距离
+        this.preloadMargin = 600; // 提前加载距离
+        // 添加加载状态控制属性
+        this.loadingTimeout = null; // 加载状态延迟显示的定时器
         
         // DOM 元素
         this.elements = {
@@ -24,7 +27,8 @@ class ImageGalleryApp {
             treeView: document.getElementById('treeView'),
             cardsGrid: document.getElementById('cardsGrid'),
             currentPath: document.getElementById('currentPath'),
-            sortSelect: document.getElementById('sortSelect'),
+            folderSortSelect: document.getElementById('sortSelect'),
+            contentSortSelect: document.getElementById('contentSortSelect'),
             refreshBtn: document.getElementById('refreshBtn'),
             contentArea: document.getElementById('contentArea'),
             loadingOverlay: document.getElementById('loadingOverlay'),
@@ -55,6 +59,10 @@ class ImageGalleryApp {
         this.setupImageObserver(); // 设置图片观察器
         this.loadData();
         console.log('🎨 守望影神图集案器 v0.1 已启动');
+        // 预加载所有缩略图（新功能）
+        setTimeout(() => {
+            this.preloadAllThumbnails();
+        }, 2000); // 延迟2秒执行，避免影响初始加载
     }
 
     // 从 localStorage 加载状态
@@ -65,8 +73,10 @@ class ImageGalleryApp {
                 const state = JSON.parse(savedState);
                 // 动态加载保存的路径
                 this.currentPath = state.currentPath || '';
-                this.sortType = state.sortType || 'name-asc';
-                this.elements.sortSelect.value = this.sortType;
+                this.folderSortType = state.folderSortType || 'name-asc';
+                this.contentSortType = state.contentSortType || 'name-asc';
+                this.elements.folderSortSelect.value = this.folderSortType;
+                this.elements.contentSortSelect.value = this.contentSortType;
                 if (state.searchQuery) {
                     this.elements.searchInput.value = state.searchQuery;
                 }
@@ -81,7 +91,8 @@ class ImageGalleryApp {
         try {
             const state = {
                 currentPath: this.currentPath,
-                sortType: this.sortType,
+                folderSortType: this.folderSortType,
+                contentSortType: this.contentSortType,
                 searchQuery: this.elements.searchInput.value.trim(),
                 expandedPaths: this.getExpandedPaths()
             };
@@ -111,7 +122,8 @@ class ImageGalleryApp {
         this.elements.clearSearch.addEventListener('click', () => this.clearSearch());
         
         // 排序和刷新
-        this.elements.sortSelect.addEventListener('change', () => this.handleSortChange());
+        this.elements.folderSortSelect.addEventListener('change', () => this.handleFolderSortChange());
+        this.elements.contentSortSelect.addEventListener('change', () => this.handleContentSortChange());
         this.elements.refreshBtn.addEventListener('click', () => this.handleRefresh());
         
         // 文件夹相关按钮
@@ -166,6 +178,10 @@ class ImageGalleryApp {
                 this.performSearch(query);
             } else {
                 this.loadData();
+                // 搜索为空时也预加载缩略图
+                setTimeout(() => {
+                    this.preloadAllThumbnails();
+                }, 1000);
             }
         }, 300);
     }
@@ -175,6 +191,12 @@ class ImageGalleryApp {
         this.elements.searchInput.value = '';
         this.saveStateToStorage();
         this.loadData();
+        // 清除搜索结果统计信息
+        this.clearSearchResultInfo();
+        // 清空搜索时也预加载缩略图
+        setTimeout(() => {
+            this.preloadAllThumbnails();
+        }, 1000);
     }
 
     // 处理刷新按钮点击
@@ -185,13 +207,34 @@ class ImageGalleryApp {
         this.allLoadedFiles = [];
         this.isScrollLoading = false;
         this.loadData();
+        // 刷新时也预加载缩略图
+        setTimeout(() => {
+            this.preloadAllThumbnails();
+        }, 1000);
     }
 
-    // 排序变化
-    handleSortChange() {
-        this.sortType = this.elements.sortSelect.value;
+    // 文件夹排序变化
+    handleFolderSortChange() {
+        this.folderSortType = this.elements.folderSortSelect.value;
         this.saveStateToStorage();
+        // 修复：左边排序方式应该只影响左边菜单栏，不影响右边图片
+        this.loadTreeData();
+        // 排序变化时也预加载缩略图
+        setTimeout(() => {
+            this.preloadAllThumbnails();
+        }, 1000);
+    }
+
+    // 内容排序变化
+    handleContentSortChange() {
+        this.contentSortType = this.elements.contentSortSelect.value;
+        this.saveStateToStorage();
+        // 修复：右边排序方式应该只影响右边图片，不影响左边菜单栏
         this.loadData();
+        // 排序变化时也预加载缩略图
+        setTimeout(() => {
+            this.preloadAllThumbnails();
+        }, 1000);
     }
 
     // 键盘事件处理
@@ -226,7 +269,21 @@ class ImageGalleryApp {
 
     // 显示/隐藏加载状态
     showLoading(show) {
-        this.elements.loadingOverlay.classList.toggle('hidden', !show);
+        // 只在需要时显示加载状态，避免频繁切换
+        if (show) {
+            // 添加一个微小的延迟，如果很快就完成加载就不显示加载状态
+            this.loadingTimeout = setTimeout(() => {
+                this.elements.loadingOverlay.classList.remove('hidden');
+            }, 100); // 100ms延迟
+        } else {
+            // 清除延迟显示的定时器
+            if (this.loadingTimeout) {
+                clearTimeout(this.loadingTimeout);
+                this.loadingTimeout = null;
+            }
+            // 隐藏加载状态
+            this.elements.loadingOverlay.classList.add('hidden');
+        }
     }
 
     // 显示通知
@@ -258,7 +315,10 @@ class ImageGalleryApp {
             this.isScrollLoading = true;
         } else {
             this.isLoading = true;
+            // 使用延迟显示加载状态的方式
             this.showLoading(true);
+            // 清除搜索结果统计信息
+            this.clearSearchResultInfo();
         }
         
         // 立即更新 UI 状态（仅在非追加模式下）
@@ -274,7 +334,8 @@ class ImageGalleryApp {
         try {
             // 处理API请求中的路径参数
             const apiPath = this.currentPath;
-            const response = await fetch(`/api/data?path=${encodeURIComponent(apiPath)}&page=${page}&per_page=50`);
+            // 修复：使用文件夹排序类型来获取目录树数据
+            const response = await fetch(`/api/data?path=${encodeURIComponent(apiPath)}&page=${page}&per_page=200&sort=${this.folderSortType}`);
             if (!response.ok) throw new Error('网络请求失败');
             
             const data = await response.json();
@@ -309,8 +370,78 @@ class ImageGalleryApp {
                 this.isScrollLoading = false;
             } else {
                 this.isLoading = false;
+                // 隐藏加载状态
                 this.showLoading(false);
             }
+        }
+    }
+
+    // 专门用于加载树形结构数据的方法
+    async loadTreeData() {
+        try {
+            // 只获取目录树数据，不获取文件数据
+            const response = await fetch(`/api/data?path=${encodeURIComponent(this.currentPath)}&page=1&per_page=1&sort=${this.folderSortType}`);
+            if (!response.ok) throw new Error('网络请求失败');
+            
+            const data = await response.json();
+            // 只渲染树结构
+            this.renderTree(data.tree);
+        } catch (error) {
+            console.error('加载目录树数据失败:', error);
+            this.showNotification('加载目录树数据失败，请检查服务器连接', 'error');
+        }
+    }
+
+    // 无阻塞的数据加载方法（用于导航优化）
+    loadDataWithoutBlocking() {
+        // 使用setTimeout将数据加载放到下一个事件循环中，避免阻塞UI
+        setTimeout(() => {
+            this.loadData();
+        }, 0);
+    }
+
+    // 预加载所有缩略图到缓存（优化版本）
+    async preloadAllThumbnails() {
+        try {
+            // 获取当前目录下的所有文件
+            const response = await fetch(`/api/data?path=${encodeURIComponent(this.currentPath)}&page=1&per_page=1000&sort=${this.contentSortType}`);
+            if (!response.ok) throw new Error('网络请求失败');
+            
+            const data = await response.json();
+            const files = data.files;
+            
+            // 创建预加载图片数组
+            const preloadImages = [];
+            
+            // 限制同时预加载的图片数量，避免过多并发请求
+            const maxConcurrent = 20;  // 增加并发数量从10到20
+            let loadedCount = 0;
+            
+            // 分批预加载图片
+            for (let i = 0; i < files.length; i += maxConcurrent) {
+                const batch = files.slice(i, i + maxConcurrent);
+                const batchPromises = batch.map(file => {
+                    return new Promise((resolve) => {
+                        const img = new Image();
+                        img.onload = () => {
+                            loadedCount++;
+                            resolve();
+                        };
+                        img.onerror = () => {
+                            loadedCount++;
+                            resolve(); // 即使出错也继续
+                        };
+                        img.src = `/api/thumbnail?path=${encodeURIComponent(file.path)}`;
+                    });
+                });
+                
+                // 等待这一批图片加载完成
+                await Promise.all(batchPromises);
+            }
+            
+            console.log(`预加载了 ${loadedCount} 张缩略图`);
+        } catch (error) {
+            console.error('预加载缩略图失败:', error);
         }
     }
 
@@ -325,11 +456,47 @@ class ImageGalleryApp {
             const results = await response.json();
             // 搜索结果不分页，直接显示所有匹配的文件
             this.renderCards(results.filter(item => !item.is_dir), false);
+            
+            // 显示搜索结果统计信息
+            const resultCount = results.filter(item => !item.is_dir).length;
+            this.showSearchResultInfo(query, resultCount);
         } catch (error) {
             console.error('搜索失败:', error);
-            this.showNotification('搜索失败', 'error');
+            this.showNotification('搜索失败，请稍后重试', 'error');
         } finally {
             this.showLoading(false);
+        }
+    }
+
+    // 显示搜索结果统计信息
+    showSearchResultInfo(query, count) {
+        const toolbar = document.querySelector('.flex.justify-between.items-center.p-4.bg-slate-900.border-b.border-slate-700');
+        if (!toolbar) return;
+        
+        // 移除已存在的统计信息
+        const existingInfo = document.getElementById('searchResultInfo');
+        if (existingInfo) {
+            existingInfo.remove();
+        }
+        
+        // 创建新的统计信息元素
+        const infoElement = document.createElement('div');
+        infoElement.id = 'searchResultInfo';
+        infoElement.className = 'text-sm text-slate-400';
+        infoElement.textContent = `与"${query}"相关的图像共计${count}张`;
+        
+        // 将统计信息插入到排序选择框的左侧
+        const sortSelect = document.getElementById('contentSortSelect');
+        if (sortSelect && sortSelect.parentNode) {
+            sortSelect.parentNode.parentNode.insertBefore(infoElement, sortSelect.parentNode);
+        }
+    }
+
+    // 清空搜索结果统计信息
+    clearSearchResultInfo() {
+        const infoElement = document.getElementById('searchResultInfo');
+        if (infoElement) {
+            infoElement.remove();
         }
     }
 
@@ -348,7 +515,7 @@ class ImageGalleryApp {
         
         // 排序文件
         files.sort((a, b) => {
-            switch (this.sortType) {
+            switch (this.contentSortType) {
                 case 'name-asc': return a.name.localeCompare(b.name);
                 case 'name-desc': return b.name.localeCompare(a.name);
                 case 'date-desc': return b.modified - a.modified;
@@ -376,6 +543,7 @@ class ImageGalleryApp {
     // 编辑单元
     async editUnit(path) {
         this.isCreating = false;
+        this.currentEditPath = path; // 保存当前编辑的路径
         try {
             const response = await fetch(`/api/unit?path=${encodeURIComponent(path)}`);
             if (!response.ok) throw new Error('获取单元数据失败');
@@ -389,9 +557,83 @@ class ImageGalleryApp {
             
             this.elements.saveBtn.onclick = () => this.saveUnit(path);
             this.elements.editModal.classList.remove('hidden');
+            
+            // 为编辑模态框添加拖拽和粘贴事件监听器
+            this.addEditModalEventListeners();
         } catch (error) {
             console.error('编辑单元失败:', error);
             this.showNotification('编辑单元失败', 'error');
+        }
+    }
+    
+    // 为编辑模态框添加事件监听器
+    addEditModalEventListeners() {
+        // 移除之前可能添加的事件监听器，避免重复绑定
+        this.elements.modalImage.removeEventListener('dragover', this.handleEditModalDragOver);
+        this.elements.modalImage.removeEventListener('drop', this.handleEditModalDrop);
+        document.removeEventListener('paste', this.handleEditModalPaste);
+        
+        // 绑定新的事件监听器
+        this.elements.modalImage.addEventListener('dragover', this.handleEditModalDragOver);
+        this.elements.modalImage.addEventListener('drop', (e) => this.handleEditModalDrop(e));
+        document.addEventListener('paste', (e) => this.handleEditModalPaste(e));
+    }
+    
+    // 处理编辑模态框的拖拽事件
+    handleEditModalDragOver(event) {
+        event.preventDefault();
+        event.stopPropagation();
+        // 添加视觉反馈
+        event.target.classList.add('drag-over');
+    }
+    
+    // 处理编辑模态框的拖放事件
+    handleEditModalDrop(event) {
+        event.preventDefault();
+        event.stopPropagation();
+        
+        // 移除视觉反馈
+        event.target.classList.remove('drag-over');
+        
+        const files = event.dataTransfer.files;
+        if (files.length > 0) {
+            const file = files[0];
+            if (file.type.startsWith('image/')) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    // 更新模态框中的预览图片
+                    app.elements.modalImage.src = e.target.result;
+                    // 保存新图片数据，用于保存时更新
+                    app.newImageBase64 = e.target.result;
+                    app.showNotification('图片已更新，保存后生效');
+                };
+                reader.readAsDataURL(file);
+            } else {
+                app.showNotification('请拖放图片文件', 'error');
+            }
+        }
+    }
+    
+    // 处理编辑模态框的粘贴事件
+    handleEditModalPaste(event) {
+        // 只在编辑模态框打开时处理粘贴事件
+        if (!this.elements.editModal.classList.contains('hidden')) {
+            const items = event.clipboardData.items;
+            for (const item of items) {
+                if (item.type.indexOf('image') !== -1) {
+                    const file = item.getAsFile();
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        // 更新模态框中的预览图片
+                        this.elements.modalImage.src = e.target.result;
+                        // 保存新图片数据，用于保存时更新
+                        this.newImageBase64 = e.target.result;
+                        this.showNotification('图片已更新，保存后生效');
+                    };
+                    reader.readAsDataURL(file);
+                    break;
+                }
+            }
         }
     }
 
@@ -447,13 +689,27 @@ class ImageGalleryApp {
 
         this.showLoading(true);
         try {
-            const payload = {
-                old_path: oldPath,
-                new_name: newName,
-                new_value: newValue
-            };
+            let payload;
+            
+            // 检查是否有新的图片数据需要更新
+            if (this.newImageBase64) {
+                // 如果有新图片，需要同时更新图片和文本
+                payload = {
+                    old_path: oldPath,
+                    new_name: newName,
+                    new_value: newValue,
+                    new_image_data: this.newImageBase64.split(',')[1] // 移除data:image前缀
+                };
+            } else {
+                // 如果没有新图片，只更新文本
+                payload = {
+                    old_path: oldPath,
+                    new_name: newName,
+                    new_value: newValue
+                };
+            }
 
-            const response = await fetch('/api/unit', {
+            const response = await fetch('/api/unit-with-image', {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
@@ -462,6 +718,8 @@ class ImageGalleryApp {
             if (response.ok) {
                 this.showNotification('保存成功');
                 this.closeModal();
+                // 清除临时图片数据
+                this.newImageBase64 = null;
                 this.loadData();
             } else {
                 const error = await response.json();
@@ -609,51 +867,15 @@ class ImageGalleryApp {
             <div class="tree-node ${isActive ? 'active' : ''}" 
                  style="padding-left: ${level * 16 + 12}px" 
                  data-path="${node.path}">
-                ${hasChildren ? 
-                    '<svg class="tree-arrow w-3 h-3 text-slate-400 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>' :
-                    '<span class="w-3 h-3 mr-1"></span>'
-                }
                 <span class="mr-2">📁</span>
                 <span class="text-sm truncate">${this.escapeHtml(node.name)}</span>
             </div>
         `;
 
         const nodeContent = nodeEl.querySelector('.tree-node');
-        const arrow = nodeContent.querySelector('.tree-arrow');
         
-        // 为箭头添加单独的点击事件（仅处理展开/收纳）
-        if (arrow) {
-            arrow.addEventListener('click', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                const childContainer = nodeContainer.querySelector('.tree-children');
-                
-                if (childContainer) {
-                    const isExpanded = !childContainer.classList.contains('hidden');
-                    
-                    if (isExpanded) {
-                        // 收纳当前菜单
-                        childContainer.classList.add('hidden');
-                        arrow.classList.remove('expanded');
-                    } else {
-                        // 先收纳同级别的其他菜单，然后展开当前菜单
-                        this.collapseSiblingMenus(nodeContainer, level);
-                        childContainer.classList.remove('hidden');
-                        arrow.classList.add('expanded');
-                    }
-                    
-                    this.saveStateToStorage(); // 保存展开状态
-                }
-            });
-        }
-        
-        // 为整个节点添加点击事件（处理路径导航并自动展开子菜单）
+        // 为整个节点添加点击事件（处理展开/收纳和路径导航）
         nodeContent.addEventListener('click', (e) => {
-            // 如果点击的是箭头，不处理导航
-            if (e.target.closest('.tree-arrow')) {
-                return;
-            }
-            
             e.preventDefault();
             e.stopPropagation();
             
@@ -661,38 +883,78 @@ class ImageGalleryApp {
             document.querySelectorAll('.tree-node.active').forEach(el => el.classList.remove('active'));
             nodeContent.classList.add('active');
             
-            // 先收纳同级别的其他展开菜单
+            // 收纳同级别的其他菜单
             this.collapseSiblingMenus(nodeContainer, level);
             
-            // 如果有子菜单，自动展开
             if (hasChildren) {
+                // 查找子菜单容器
                 const childContainer = nodeContainer.querySelector('.tree-children');
-                if (childContainer && childContainer.classList.contains('hidden')) {
-                    childContainer.classList.remove('hidden');
-                    if (arrow) {
-                        arrow.classList.add('expanded');
+                
+                if (childContainer) {
+                    const isExpanded = !childContainer.classList.contains('hidden');
+                    
+                    // 切换当前菜单的展开/收纳状态
+                    if (isExpanded) {
+                        // 收纳当前菜单
+                        childContainer.classList.add('hidden');
+                    } else {
+                        // 展开当前菜单
+                        childContainer.classList.remove('hidden');
                     }
+                    
+                    this.saveStateToStorage(); // 保存展开状态
                 }
             }
             
-            // 更新路径和状态
+            // 更新路径和状态（即使没有子菜单也要更新路径）
             this.currentPath = node.path;
             this.saveStateToStorage();
             
+            // 显示加载状态但不阻塞UI
+            this.showLoading(false); // 先隐藏可能存在的加载状态
             // 简单直接的数据加载
-            this.loadData();
+            this.loadDataWithoutBlocking();
         });
 
-        // 添加双击事件用于重命名
+        // 添加双击事件用于重命名（覆盖整个节点区域）
         nodeContent.addEventListener('dblclick', (e) => {
             e.preventDefault();
             e.stopPropagation();
             this.renameFolder(node.path, node.name);
         });
+        
+        // 添加键盘事件监听器用于删除功能（覆盖整个节点区域）
+        nodeContent.addEventListener('keydown', (e) => {
+            // 检查是否按下了Delete键
+            if (e.key === 'Delete' || e.keyCode === 46) {
+                e.preventDefault();
+                e.stopPropagation();
+                this.deleteFolder(node.path, node.name);
+            }
+        });
+        
+        // 让节点可以获得焦点，以便接收键盘事件
+        nodeContent.setAttribute('tabindex', '0');
+        
+        // 添加右键菜单事件（覆盖整个节点区域）
+        nodeContent.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            this.showContextMenu(e, node.path, node.name, hasChildren);
+        });
+        
+        // 添加焦点事件，确保节点在获得焦点时的可见性
+        nodeContent.addEventListener('focus', () => {
+            nodeContent.classList.add('focused');
+        });
+        
+        nodeContent.addEventListener('blur', () => {
+            nodeContent.classList.remove('focused');
+        });
 
         nodeContainer.appendChild(nodeEl);
 
-        // 如果有子节点，创建子节点容器
+        // 如果有子节点，创建子节点容器（默认隐藏）
         if (hasChildren) {
             const childContainer = document.createElement('div');
             childContainer.className = 'tree-children hidden';
@@ -709,24 +971,21 @@ class ImageGalleryApp {
 
     // 收纳同级别的其他展开菜单
     collapseSiblingMenus(currentContainer, currentLevel) {
-        // 获取父容器
+        // 获取当前容器的父容器
         const parentContainer = currentContainer.parentElement;
         if (!parentContainer) return;
         
-        // 查找所有同级别的节点
-        const siblingContainers = parentContainer.querySelectorAll(':scope > .tree-node-container');
+        // 查找所有同级别的节点容器
+        const siblingContainers = Array.from(parentContainer.children).filter(child => 
+            child.classList.contains('tree-node-container') && child !== currentContainer
+        );
         
+        // 遍历同级别节点，收纳它们的子菜单
         siblingContainers.forEach(container => {
-            if (container !== currentContainer) {
-                const childrenContainer = container.querySelector('.tree-children');
-                const arrow = container.querySelector('.tree-arrow');
-                
-                if (childrenContainer && !childrenContainer.classList.contains('hidden')) {
-                    childrenContainer.classList.add('hidden');
-                    if (arrow) {
-                        arrow.classList.remove('expanded');
-                    }
-                }
+            const childrenContainer = container.querySelector('.tree-children');
+            
+            if (childrenContainer && !childrenContainer.classList.contains('hidden')) {
+                childrenContainer.classList.add('hidden');
             }
         });
     }
@@ -743,6 +1002,12 @@ class ImageGalleryApp {
         });
 
         this.elements.currentPath.innerHTML = pathHtml;
+        
+        // 添加一个微小的延迟来确保DOM更新完成
+        setTimeout(() => {
+            // 触发一个自定义事件表示路径显示已更新
+            this.elements.currentPath.dispatchEvent(new CustomEvent('pathUpdated'));
+        }, 0);
     }
 
     // 导航到指定路径
@@ -755,7 +1020,26 @@ class ImageGalleryApp {
         this.hasMore = true;
         this.allLoadedFiles = [];
         this.isScrollLoading = false;
-        this.loadData();
+        
+        // 立即更新 UI 状态，给用户反馈
+        document.querySelectorAll('.tree-node.active').forEach(el => el.classList.remove('active'));
+        const activeNode = document.querySelector(`[data-path="${this.currentPath}"]`);
+        if (activeNode) {
+            activeNode.classList.add('active');
+        }
+        this.updatePathDisplay();
+        
+        // 清空卡片区域但不显示全局加载状态
+        this.elements.cardsGrid.innerHTML = '';
+        this.allLoadedFiles = [];
+        
+        // 使用无阻塞方式加载数据
+        this.loadDataWithoutBlocking();
+        
+        // 导航时也预加载缩略图
+        setTimeout(() => {
+            this.preloadAllThumbnails();
+        }, 500); // 缩短延迟时间
     }
 
     // 创建包含缩略图的卡片
@@ -912,8 +1196,8 @@ class ImageGalleryApp {
         
         // 定义新的滚动处理函数
         this.scrollHandler = () => {
-            // 检查是否滚动到底部（提前100px开始加载）
-            if (contentArea.scrollTop + contentArea.clientHeight >= contentArea.scrollHeight - 100) {
+            // 检查是否滚动到底部（提前200px开始加载，从100增加到200）
+            if (contentArea.scrollTop + contentArea.clientHeight >= contentArea.scrollHeight - 200) {
                 if (this.hasMore && !this.isScrollLoading && !this.isLoading) {
                     this.loadData(this.currentPage + 1, true);
                 }
@@ -1028,6 +1312,54 @@ class ImageGalleryApp {
         this.elements.folderNameInput.focus();
     }
 
+    // 删除文件夹
+    async deleteFolder(path, name) {
+        if (!confirm(`确定要删除文件夹 "${name}" 吗？此操作不可逆，将删除该文件夹及其所有内容。`)) {
+            return;
+        }
+
+        this.showLoading(true);
+        try {
+            // 发送请求删除文件夹
+            const response = await fetch('/api/folder', {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    path: path
+                })
+            });
+
+            // 检查响应是否为JSON格式
+            const contentType = response.headers.get('content-type');
+            if (contentType && contentType.includes('application/json')) {
+                if (response.ok) {
+                    const result = await response.json();
+                    this.showNotification('文件夹删除成功');
+                    // 如果当前路径是被删除的文件夹或其子文件夹，需要导航到父文件夹
+                    if (this.currentPath === path || this.currentPath.startsWith(path + '/')) {
+                        // 导航到父文件夹
+                        const pathParts = path.split('/');
+                        pathParts.pop();
+                        this.currentPath = pathParts.join('/');
+                    }
+                    this.loadData(); // 重新加载数据
+                } else {
+                    const error = await response.json();
+                    throw new Error(error.error || '删除文件夹失败');
+                }
+            } else {
+                // 如果响应不是JSON格式，可能是服务器错误页面
+                const text = await response.text();
+                throw new Error(`服务器返回错误: ${text.substring(0, 100)}...`);
+            }
+        } catch (error) {
+            console.error('删除文件夹失败:', error);
+            this.showNotification('删除文件夹失败: ' + error.message, 'error');
+        } finally {
+            this.showLoading(false);
+        }
+    }
+
     // 保存文件夹重命名
     async saveFolderRename(oldPath) {
         const newName = this.elements.folderNameInput.value.trim();
@@ -1091,6 +1423,104 @@ class ImageGalleryApp {
         } finally {
             this.showLoading(false);
         }
+    }
+
+    // 显示上下文菜单
+    showContextMenu(event, path, name, hasChildren) {
+        // 创建上下文菜单
+        const contextMenu = document.createElement('div');
+        contextMenu.className = 'context-menu';
+        contextMenu.style.position = 'absolute';
+        contextMenu.style.left = event.pageX + 'px';
+        contextMenu.style.top = event.pageY + 'px';
+        contextMenu.style.backgroundColor = '#1e293b';
+        contextMenu.style.border = '1px solid #334155';
+        contextMenu.style.borderRadius = '4px';
+        contextMenu.style.padding = '4px 0';
+        contextMenu.style.zIndex = '1000';
+        contextMenu.style.boxShadow = '0 4px 6px rgba(0, 0, 0, 0.1)';
+        contextMenu.style.minWidth = '120px';
+        
+        // 添加重命名选项
+        const renameItem = document.createElement('div');
+        renameItem.className = 'context-menu-item';
+        renameItem.style.padding = '8px 12px';
+        renameItem.style.cursor = 'pointer';
+        renameItem.style.fontSize = '14px';
+        renameItem.textContent = '重命名';
+        renameItem.addEventListener('click', () => {
+            this.renameFolder(path, name);
+            document.body.removeChild(contextMenu);
+        });
+        renameItem.addEventListener('mouseenter', () => {
+            renameItem.style.backgroundColor = '#334155';
+        });
+        renameItem.addEventListener('mouseleave', () => {
+            renameItem.style.backgroundColor = '';
+        });
+        contextMenu.appendChild(renameItem);
+        
+        // 添加删除选项
+        const deleteItem = document.createElement('div');
+        deleteItem.className = 'context-menu-item';
+        deleteItem.style.padding = '8px 12px';
+        deleteItem.style.cursor = 'pointer';
+        deleteItem.style.fontSize = '14px';
+        deleteItem.textContent = '删除';
+        deleteItem.addEventListener('click', () => {
+            this.deleteFolder(path, name);
+            document.body.removeChild(contextMenu);
+        });
+        deleteItem.addEventListener('mouseenter', () => {
+            deleteItem.style.backgroundColor = '#334155';
+        });
+        deleteItem.addEventListener('mouseleave', () => {
+            deleteItem.style.backgroundColor = '';
+        });
+        contextMenu.appendChild(deleteItem);
+        
+        // 添加新建子文件夹选项（如果有子菜单）
+        if (hasChildren) {
+            const separator = document.createElement('div');
+            separator.style.height = '1px';
+            separator.style.backgroundColor = '#334155';
+            separator.style.margin = '4px 0';
+            contextMenu.appendChild(separator);
+            
+            const newChildItem = document.createElement('div');
+            newChildItem.className = 'context-menu-item';
+            newChildItem.style.padding = '8px 12px';
+            newChildItem.style.cursor = 'pointer';
+            newChildItem.style.fontSize = '14px';
+            newChildItem.textContent = '新建子文件夹';
+            newChildItem.addEventListener('click', () => {
+                this.openFolderModal('新建子级文件夹', path);
+                document.body.removeChild(contextMenu);
+            });
+            newChildItem.addEventListener('mouseenter', () => {
+                newChildItem.style.backgroundColor = '#334155';
+            });
+            newChildItem.addEventListener('mouseleave', () => {
+                newChildItem.style.backgroundColor = '';
+            });
+            contextMenu.appendChild(newChildItem);
+        }
+        
+        // 添加到页面
+        document.body.appendChild(contextMenu);
+        
+        // 点击其他地方关闭菜单
+        const closeMenu = (e) => {
+            if (!contextMenu.contains(e.target)) {
+                document.body.removeChild(contextMenu);
+                document.removeEventListener('click', closeMenu);
+            }
+        };
+        
+        // 等一帧再添加事件监听器，避免立即触发
+        setTimeout(() => {
+            document.addEventListener('click', closeMenu);
+        }, 0);
     }
 }
 

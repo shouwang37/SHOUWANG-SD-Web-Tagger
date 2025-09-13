@@ -1,10 +1,11 @@
 import urllib.request
 import urllib.parse
+import urllib.error
 import json
 
 # 测试创建文件夹API
 data = json.dumps({'parent_path': '', 'name': 'test_folder'}).encode('utf-8')
-req = urllib.request.Request('http://127.0.0.1:5000/api/folder', data=data, headers={'Content-Type': 'application/json'})
+req = urllib.request.Request('http://127.0.0.1:3737/api/folder', data=data, headers={'Content-Type': 'application/json'})
 
 try:
     response = urllib.request.urlopen(req)

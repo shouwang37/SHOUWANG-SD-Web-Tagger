@@ -38,7 +38,7 @@ def create_thumbnail(image_path, size=(200, 200)):
         print(f"缩略图创建失败: {e}")
         return None
 
-def get_directory_tree(base_path):
+def get_directory_tree(base_path, sort_type='name-asc'):
     """获取目录树结构"""
     def build_tree(path):
         tree = []
@@ -49,7 +49,29 @@ def get_directory_tree(base_path):
                 
             items = os.listdir(path)
             dirs = [item for item in items if os.path.isdir(os.path.join(path, item))]
-            dirs.sort()
+            
+            # 根据排序类型进行排序
+            if sort_type == 'name-asc':
+                dirs.sort()
+            elif sort_type == 'name-desc':
+                dirs.sort(reverse=True)
+            elif sort_type == 'date-desc' or sort_type == 'date-asc':
+                # 按修改时间排序
+                dirs_with_time = []
+                for dir_name in dirs:
+                    dir_path = os.path.join(path, dir_name)
+                    try:
+                        modified_time = os.path.getmtime(dir_path)
+                    except:
+                        modified_time = 0
+                    dirs_with_time.append((dir_name, modified_time))
+                
+                # 按修改时间排序
+                dirs_with_time.sort(key=lambda x: x[1], reverse=(sort_type == 'date-desc'))
+                dirs = [item[0] for item in dirs_with_time]
+            else:
+                # 默认按名称升序
+                dirs.sort()
             
             for dir_name in dirs:
                 dir_path = os.path.join(path, dir_name)

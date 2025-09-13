@@ -53,15 +53,16 @@ body {
 }
 
 .unit-name {
-    height: 38px; /* 适当增加高度 */
+    height: 38px;
     display: flex;
-    align-items: center;
+    flex-direction: column;
     justify-content: center;
+    align-items: center;
     font-weight: 600;
-    font-size: 13px; /* 适当增大字体 */
+    font-size: 13px;
     background: rgba(17, 24, 39, 0.8);
     border-bottom: 1px solid rgba(71, 85, 105, 0.3);
-    padding: 4px 8px;
+    padding: 6px 8px;
     text-align: center;
     line-height: 1.2;
     word-break: break-word;
@@ -72,8 +73,10 @@ body {
     -webkit-line-clamp: 3;
     -webkit-box-orient: vertical;
     overflow: hidden;
-    align-items: flex-start;
-    padding-top: 6px;
+    /* 添加一些额外的样式使文本更美观 */
+    letter-spacing: 0.5px;
+    /* 确保文本不会贴边 */
+    margin: 0 4px;
 }
 
 .unit-value {
@@ -123,11 +126,14 @@ body {
     display: flex;
     align-items: center;
     user-select: none;
+    position: relative;
+    z-index: 1;
 }
 
 .tree-node:hover {
     background: rgba(59, 130, 246, 0.1);
     transform: translateX(4px);
+    z-index: 2;
 }
 
 .tree-node:active {
@@ -138,41 +144,50 @@ body {
 .tree-node.active {
     background: rgba(59, 130, 246, 0.2);
     border-left: 3px solid #3b82f6;
+    z-index: 3;
 }
 
-.tree-arrow {
-    transition: transform 0.15s ease;
-    margin-right: 6px;
-    cursor: pointer;
-    padding: 2px;
-    border-radius: 2px;
-}
-
-.tree-arrow:hover {
-    background: rgba(59, 130, 246, 0.15);
-    transform: scale(1.1);
-}
-
-.tree-arrow:active {
-    background: rgba(59, 130, 246, 0.25);
-    transform: scale(0.95);
-}
-
-.tree-arrow.expanded {
-    transform: rotate(90deg);
+/* 添加焦点状态样式 */
+.tree-node.focused {
+    outline: 2px solid #3b82f6;
+    outline-offset: -2px;
 }
 
 .tree-children {
     transition: all 0.15s ease;
+    margin-left: 16px;
+    position: relative;
+    /* 确保子菜单正确排列 */
+    display: block;
 }
 
 .tree-children.hidden {
-    max-height: 0;
-    overflow: hidden;
+    display: none;
 }
 
-.tree-children:not(.hidden) {
-    max-height: 1000px;
+/* 添加层级控制，确保子菜单在父菜单之上 */
+.tree-node-container {
+    position: relative;
+    display: block;
+}
+
+/* 为有子菜单的节点添加视觉指示 */
+.tree-node.has-children::before {
+    content: "";
+    position: absolute;
+    left: 4px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 0;
+    height: 0;
+    border-top: 4px solid transparent;
+    border-bottom: 4px solid transparent;
+    border-left: 6px solid #94a3b8;
+    transition: transform 0.15s ease;
+}
+
+.tree-node.has-children.expanded::before {
+    transform: translateY(-50%) rotate(90deg);
 }
 
 .tree-node span:last-child {
@@ -190,6 +205,27 @@ body {
 .tree-node span:last-child:active {
     background: rgba(59, 130, 246, 0.2);
     transform: scale(0.98);
+}
+
+/* 添加上下文菜单样式 */
+.context-menu {
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 4px;
+    padding: 4px 0;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    min-width: 120px;
+    z-index: 1000;
+}
+
+.context-menu-item {
+    padding: 8px 12px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.context-menu-item:hover {
+    background: #334155;
 }
 
 /* 搜索框样式 */
@@ -221,6 +257,12 @@ body {
     width: 90%;
 }
 
+/* 拖拽区域样式 */
+.drag-over {
+    border: 2px dashed #3b82f6 !important;
+    background-color: rgba(59, 130, 246, 0.1);
+}
+
 /* 加载动画 */
 .loading-spinner {
     border: 3px solid rgba(59, 130, 246, 0.1);
@@ -234,20 +276,6 @@ body {
 @keyframes spin {
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
-}
-
-/* 拖拽区域 */
-.drop-zone {
-    border: 2px dashed rgba(59, 130, 246, 0.5);
-    border-radius: 16px;
-    background: rgba(59, 130, 246, 0.05);
-    transition: all 0.3s ease;
-}
-
-.drop-zone.dragover {
-    border-color: #3b82f6;
-    background: rgba(59, 130, 246, 0.1);
-    transform: scale(1.02);
 }
 
 /* 滚动条样式 */

@@ -64,8 +64,102 @@ def create_unit(path, name, value, image_data):
     
     return {'message': '单元创建成功'}, 201
 
+def update_unit_with_image(old_path, new_name, new_value, new_image_data=None):
+    """更新单元（包含图片）"""
+    old_full_path = os.path.join(IMAGE_DIR, old_path)
+    
+    if not os.path.exists(old_full_path):
+        return {'error': '原文件不存在'}, 404
+    
+    # 获取目录和文件信息
+    directory = os.path.dirname(old_full_path)
+    old_name, ext = os.path.splitext(os.path.basename(old_full_path))
+    
+    # 新文件路径
+    new_image_path = os.path.join(directory, f"{new_name}{ext}")
+    new_txt_path = os.path.join(directory, f"{new_name}.txt")
+    old_txt_path = os.path.join(directory, f"{old_name}.txt")
+    
+    # 只有当名称真正改变且新名称对应的文件已存在时才检查名称冲突
+    # 排除同名保存的情况（new_image_path == old_full_path）
+    if new_name != old_name and os.path.exists(new_image_path) and new_image_path != old_full_path:
+        return {'error': '新名称已存在'}, 409
+    
+    with file_lock:
+        try:
+            # 更新图片（如果提供了新图片数据）
+            if new_image_data:
+                # 保存新图片
+                try:
+                    image_bytes = base64.b64decode(new_image_data)
+                    with open(new_image_path, 'wb') as f:
+                        f.write(image_bytes)
+                except Exception as e:
+                    return {'error': f'新图片保存失败: {str(e)}'}, 500
+                
+                # 如果文件名改变了，删除旧文件
+                if new_name != old_name and os.path.exists(old_full_path):
+                    os.remove(old_full_path)
+                
+                # 删除旧缩略图
+                old_thumbnail = os.path.join(THUMBNAIL_DIR, old_path.replace(ext, '.jpg'))
+                if os.path.exists(old_thumbnail):
+                    os.remove(old_thumbnail)
+            else:
+                # 重命名文件（仅当名称改变时）
+                if new_name != old_name:
+                    os.rename(old_full_path, new_image_path)
+                    
+                    # 重命名txt文件
+                    if os.path.exists(old_txt_path):
+                        os.rename(old_txt_path, new_txt_path)
+                    
+                    # 删除旧缩略图
+                    old_thumbnail = os.path.join(THUMBNAIL_DIR, old_path.replace(ext, '.jpg'))
+                    if os.path.exists(old_thumbnail):
+                        os.remove(old_thumbnail)
+            
+            # 更新txt内容
+            # 使用新的路径或旧的路径来保存txt文件
+            txt_path_to_use = new_txt_path if new_name != old_name or new_image_data else old_txt_path
+            with open(txt_path_to_use, 'w', encoding='utf-8') as f:
+                f.write(new_value)
+            
+        except Exception as e:
+            return {'error': f'更新失败: {str(e)}'}, 500
+    
+    return {'message': '单元更新成功'}, 200
+
+def delete_unit(path):
+    """删除单元"""
+    full_path = os.path.join(IMAGE_DIR, path)
+    
+    if not os.path.exists(full_path):
+        return {'error': '文件不存在'}, 404
+    
+    try:
+        with file_lock:
+            # 删除图片文件
+            os.remove(full_path)
+            
+            # 删除对应的txt文件
+            name = os.path.splitext(os.path.basename(full_path))[0]
+            txt_path = os.path.join(os.path.dirname(full_path), f"{name}.txt")
+            if os.path.exists(txt_path):
+                os.remove(txt_path)
+            
+            # 删除缩略图
+            thumbnail_path = os.path.join(THUMBNAIL_DIR, path.replace(os.path.splitext(path)[1], '.jpg'))
+            if os.path.exists(thumbnail_path):
+                os.remove(thumbnail_path)
+        
+        return {'message': '单元删除成功'}, 200
+        
+    except Exception as e:
+        return {'error': f'删除失败: {str(e)}'}, 500
+
 def update_unit(old_path, new_name, new_value):
-    """更新单元"""
+    """更新单元（不包含图片）"""
     old_full_path = os.path.join(IMAGE_DIR, old_path)
     
     if not os.path.exists(old_full_path):
@@ -110,31 +204,3 @@ def update_unit(old_path, new_name, new_value):
             return {'error': f'更新失败: {str(e)}'}, 500
     
     return {'message': '单元更新成功'}, 200
-
-def delete_unit(path):
-    """删除单元"""
-    full_path = os.path.join(IMAGE_DIR, path)
-    
-    if not os.path.exists(full_path):
-        return {'error': '文件不存在'}, 404
-    
-    try:
-        with file_lock:
-            # 删除图片文件
-            os.remove(full_path)
-            
-            # 删除对应的txt文件
-            name = os.path.splitext(os.path.basename(full_path))[0]
-            txt_path = os.path.join(os.path.dirname(full_path), f"{name}.txt")
-            if os.path.exists(txt_path):
-                os.remove(txt_path)
-            
-            # 删除缩略图
-            thumbnail_path = os.path.join(THUMBNAIL_DIR, path.replace(os.path.splitext(path)[1], '.jpg'))
-            if os.path.exists(thumbnail_path):
-                os.remove(thumbnail_path)
-        
-        return {'message': '单元删除成功'}, 200
-        
-    except Exception as e:
-        return {'error': f'删除失败: {str(e)}'}, 500

@@ -4,7 +4,7 @@ import time
 from flask import jsonify, request, send_from_directory, abort
 from .config import IMAGE_DIR, THUMBNAIL_DIR, file_lock
 from .utils import get_directory_tree, get_files_in_directory, search_all_files, create_thumbnail
-from .file_operations import get_unit_details, create_unit, update_unit, delete_unit
+from .file_operations import get_unit_details, create_unit, update_unit, delete_unit, update_unit_with_image
 
 def register_routes(app):
     """注册所有路由"""
@@ -29,17 +29,19 @@ def register_routes(app):
     def api_data():
         """获取目录树和文件数据（支持分页）"""
         path = request.args.get('path', '').strip('/')
+        # 获取排序参数
+        sort_type = request.args.get('sort', 'name-asc')
         # 获取页码和每页数量参数，设置默认值
         try:
             page = int(request.args.get('page', 1))
-            per_page = int(request.args.get('per_page', 50))
+            per_page = int(request.args.get('per_page', 200))  # 修改每页数量从70到200
             # 限制每页最大数量
-            per_page = min(per_page, 100)
+            per_page = min(per_page, 200)  # 修改最大数量限制从100到200
         except ValueError:
-            page, per_page = 1, 50
+            page, per_page = 1, 200  # 修改默认每页数量从70到200
         
-        # 获取目录树
-        tree = get_directory_tree(IMAGE_DIR)
+        # 获取目录树（支持排序）
+        tree = get_directory_tree(IMAGE_DIR, sort_type)
         
         # 获取当前路径下的文件
         current_dir = os.path.join(IMAGE_DIR, path) if path else IMAGE_DIR
@@ -156,6 +158,18 @@ def register_routes(app):
             import traceback
             traceback.print_exc()
             return abort(500, f'服务器内部错误: {str(e)}')
+
+    # 添加一个简单的健康检查端点
+    @app.route('/api/health')
+    def api_health():
+        """健康检查端点"""
+        return jsonify({'status': 'ok', 'timestamp': time.time()})
+    
+    @app.route('/api/version')
+    def api_version():
+        """版本信息端点"""
+        from .config import VERSION
+        return jsonify({'version': VERSION})
     
     @app.route('/api/image')
     def api_image():
@@ -282,6 +296,35 @@ def register_routes(app):
         except Exception as e:
             return jsonify({'error': f'更新失败: {str(e)}'}), 500
     
+    @app.route('/api/unit-with-image', methods=['PUT'])
+    def api_update_unit_with_image():
+        """更新单元（包含图片）"""
+        try:
+            data = request.get_json()
+            
+            if not data:
+                return jsonify({'error': '无效的数据格式'}), 400
+            
+            old_path = data.get('old_path', '')
+            new_name = data.get('new_name', '').strip()
+            new_value = data.get('new_value', '').strip()
+            new_image_data = data.get('new_image_data', '')  # 新图片数据
+            
+            # 验证输入
+            if not old_path or not new_name:
+                return jsonify({'error': '路径和新名称不能为空'}), 400
+            
+            # 获取安全的文件名
+            from .utils import get_safe_filename
+            new_name = get_safe_filename(new_name)
+            
+            # 更新单元（包含图片）
+            result, status_code = update_unit_with_image(old_path, new_name, new_value, new_image_data)
+            return jsonify(result), status_code
+            
+        except Exception as e:
+            return jsonify({'error': f'更新失败: {str(e)}'}), 500
+    
     @app.route('/api/unit', methods=['DELETE'])
     def api_delete_unit():
         """删除单元"""
@@ -378,3 +421,46 @@ def register_routes(app):
             import traceback
             traceback.print_exc()  # 打印错误堆栈以便调试
             return jsonify({'error': f'重命名失败: {str(e)}'}), 500
+
+    @app.route('/api/folder', methods=['DELETE'])
+    def api_delete_folder():
+        """删除文件夹"""
+        try:
+            data = request.get_json()
+            
+            if not data:
+                return jsonify({'error': '无效的数据格式'}), 400
+            
+            path = data.get('path', '').strip('/')
+            
+            # 验证输入
+            if not path:
+                return jsonify({'error': '路径不能为空'}), 400
+            
+            # 构建完整路径
+            full_path = os.path.join(IMAGE_DIR, path)
+            
+            # 检查文件夹是否存在
+            if not os.path.exists(full_path):
+                return jsonify({'error': '文件夹不存在'}), 404
+            
+            # 检查是否为目录
+            if not os.path.isdir(full_path):
+                return jsonify({'error': '指定路径不是文件夹'}), 400
+            
+            # 删除文件夹及其所有内容
+            import shutil
+            shutil.rmtree(full_path)
+            
+            # 同时删除缩略图目录中的对应文件夹（如果存在）
+            thumbnail_path = os.path.join(THUMBNAIL_DIR, path)
+            if os.path.exists(thumbnail_path):
+                shutil.rmtree(thumbnail_path)
+            
+            return jsonify({'message': '文件夹删除成功'}), 200
+            
+        except Exception as e:
+            # 确保始终返回JSON格式的错误信息
+            import traceback
+            traceback.print_exc()  # 打印错误堆栈以便调试
+            return jsonify({'error': f'删除失败: {str(e)}'}), 500

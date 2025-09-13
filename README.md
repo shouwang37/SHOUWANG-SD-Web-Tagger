@@ -9,7 +9,7 @@
 专为 Stable Diffusion 等 AI 绘图工具设计的本地图集管理桌面应用，帮助 AI 绘图创作者高效管理作品与提示词。
 
 <p align="center">
-  <img src="src/吴国太 淑逸闲华.ico" alt="界面预览" width="700">
+  <img src="src/SHOUWANG-SD-Web-Tagger0.1.png" alt="界面预览" width="1280">
 </p>
 
 
@@ -32,6 +32,13 @@
 - **🚀 图片优化**：懒加载与缩略图优化
 - **📋 便捷操作**：即时预览、Ctrl+V 粘贴创建、状态保持
 - **🎮 一键启动**：双击 bat 文件即可启动
+- **🔄 文件夹管理**：支持创建、重命名、删除文件夹
+- **🔁 无限滚动加载**：自动加载更多图片，提升浏览体验
+- **🖼️ 图片预览**：支持原图查看，可放大显示
+- **📥 粘贴创建**：支持从剪贴板粘贴图片创建新单元
+- **📤 复制提示词**：一键复制提示词到剪贴板
+- **🔄 排序功能**：支持按名称、修改时间等多种排序方式
+- **🔁 刷新功能**：实时刷新数据，同步文件系统变化
 
 ## 🏗️ 技术架构
 
@@ -56,10 +63,9 @@
 │   └── styles.css        # 样式文件
 ├── images/               # 图片存储目录
 ├── thumbnails/           # 缩略图缓存目录
-├── demo.py              # Flask 后端服务入口
+├── app.py              # Flask 后端服务入口
 ├── requirements.txt     # 依赖包说明
 ├── 启动守望影神图集案器.bat  # 完整启动脚本
-└── 停止服务器.bat         # 停止服务器脚本
 ```
 
 ## 🚀 安装与运行
@@ -88,14 +94,10 @@
 
 #### 方法二：命令行启动
 ```bash
-python demo.py
+python app.py
 ```
 
-启动成功后，应用将在 http://127.0.0.1:5000 提供服务。
-
-### 停止应用
-
-运行 `停止服务器.bat` 脚本。
+启动成功后，应用将在 http://127.0.0.1:3737 提供服务。
 
 ## 📖 使用说明
 
@@ -133,6 +135,14 @@ python demo.py
 ### 8. 文件夹管理
 - 点击左侧"同级"或"子级"按钮创建新文件夹
 - 双击文件夹名称可重命名
+- 右键点击文件夹可进行重命名或删除操作
+
+### 9. 排序功能
+- 左侧文件夹导航支持按名称、修改时间排序
+- 右侧内容区域支持按名称、修改时间排序
+
+### 10. 刷新功能
+- 点击刷新按钮可同步文件系统变化
 
 ## 🛠️ 开发指南
 
@@ -148,7 +158,7 @@ python demo.py
   - `index.html`：主页面
   - `script.js`：前端 JavaScript 逻辑
   - `styles.css`：样式表
-- `demo.py`：应用入口文件
+- `app.py`：应用入口文件
 - `images/`：用户图片存储目录
 - `thumbnails/`：系统自动生成的缩略图缓存目录
 
@@ -165,8 +175,12 @@ python demo.py
 | `/api/unit` | POST | 创建新单元 |
 | `/api/unit` | PUT | 更新单元 |
 | `/api/unit` | DELETE | 删除单元 |
+| `/api/unit-with-image` | PUT | 更新单元（包含图片） |
 | `/api/folder` | POST | 创建文件夹 |
 | `/api/folder/rename` | PUT | 重命名文件夹 |
+| `/api/folder` | DELETE | 删除文件夹 |
+| `/api/health` | GET | 健康检查 |
+| `/api/version` | GET | 版本信息 |
 
 ## 📈 版本更新
 
@@ -177,6 +191,10 @@ python demo.py
 - ✅ 搜索功能
 - ✅ 拖拽上传
 - ✅ 粘贴创建
+- ✅ 无限滚动加载
+- ✅ 图片预览功能
+- ✅ 排序功能
+- ✅ 刷新功能
 
 ## 🎯 计划功能
 
@@ -191,16 +209,14 @@ python demo.py
 
 - Bilibili: [@苍穹殿殿主守望](https://space.bilibili.com/1284158907)
 - GitHub: [@shouwang37](https://github.com/shouwang37)
+- QQ: [@苍穹殿殿主守望](3356478515)
+
+**特别感谢：**
+
+​	群U：@[index](3568659032)和[@BillBum](1584099650) 提供的帮助
 
 ## 📄 许可证
 
 本项目仅供个人学习和研究使用。
 
 ---
-
-<p align="center">
-  <img src="https://img.shields.io/github/languages/code-size/YourUsername/image-gallery-manager?style=flat-square" alt="Code Size">
-  <img src="https://img.shields.io/github/repo-size/YourUsername/image-gallery-manager?style=flat-square" alt="Repo Size">
-  <img src="https://img.shields.io/github/last-commit/YourUsername/image-gallery-manager?style=flat-square" alt="Last Commit">
-  <img src="https://img.shields.io/github/issues/YourUsername/image-gallery-manager?style=flat-square" alt="Issues">
-</p>

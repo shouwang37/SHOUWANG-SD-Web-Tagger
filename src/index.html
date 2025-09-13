@@ -62,6 +62,15 @@
                     子级
                 </button>
             </div>
+            <!-- 排序选项 -->
+            <div class="mb-4">
+                <select id="sortSelect" class="w-full bg-slate-800 border border-slate-600 rounded-lg px-2 py-1 text-xs">
+                    <option value="name-asc" selected>名称 A-Z</option>
+                    <option value="name-desc">名称 Z-A</option>
+                    <option value="date-desc">最新优先</option>
+                    <option value="date-asc">最旧优先</option>
+                </select>
+            </div>
             <div id="treeView" class="space-y-1"></div>
         </aside>
 
@@ -71,7 +80,7 @@
             <div class="flex justify-between items-center p-4 bg-slate-900 border-b border-slate-700">
                 <span id="currentPath" class="text-sm text-slate-400">images /</span>
                 <div class="flex items-center space-x-2">
-                    <select id="sortSelect" class="bg-slate-800 border border-slate-600 rounded-lg px-3 py-1 text-sm">
+                    <select id="contentSortSelect" class="bg-slate-800 border border-slate-600 rounded-lg px-3 py-1 text-sm">
                         <option value="name-asc" selected>名称 A-Z</option>
                         <option value="name-desc">名称 Z-A</option>
                         <option value="date-desc">最新优先</option>
@@ -123,7 +132,7 @@
             <h2 id="modalTitle" class="text-xl font-bold mb-6">编辑单元</h2>
             <div class="flex gap-6">
                 <div class="flex-shrink-0">
-                    <img id="modalImage" src="" alt="预览" class="w-64 h-auto rounded-lg bg-slate-800">
+                    <img id="modalImage" src="" alt="预览" class="w-64 h-auto rounded-lg bg-slate-800" style="border: 2px dashed transparent;">
                 </div>
                 <div class="flex-1 space-y-4">
                     <div>
